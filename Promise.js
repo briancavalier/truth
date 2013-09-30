@@ -1,4 +1,4 @@
-var nextTick, handlerQueue, bind, uncurryThis, call, MutationObserver;
+var nextTick, handlerQueue, bind, uncurryThis, call, MutationObserver, undef;
 
 bind = Function.prototype.bind;
 uncurryThis = bind.bind(bind.call);
@@ -10,6 +10,7 @@ Promise.resolve = resolve;
 Promise.cast    = cast;
 Promise.reject  = reject;
 Promise.all     = all;
+Promise.race    = race;
 
 // Return a pending promise whose fate is determined by resolver
 function Promise(resolver) {
@@ -32,7 +33,7 @@ function Promise(resolver) {
 
 	// Reject with reason verbatim
 	function promiseReject(reason) {
-		promiseResolve(new RejectedPromise(reason));
+		promiseResolve(new Rejected(reason));
 	}
 
 	// Resolve with a value, promise, or thenable
@@ -42,7 +43,7 @@ function Promise(resolver) {
 		}
 
 		var queue = handlers;
-		handlers = void 0;
+		handlers = undef;
 
 		enqueue(function () {
 			value = coerce(x);
@@ -77,7 +78,7 @@ function coerce(x) {
 	}
 
 	if (!(x === Object(x) && 'then' in x)) {
-		return new FulfilledPromise(x);
+		return new Fulfilled(x);
 	}
 
 	return new Promise(function(resolve, reject) {
@@ -87,7 +88,7 @@ function coerce(x) {
 			if(typeof untrustedThen === 'function') {
 				call(untrustedThen, x, resolve, reject);
 			} else {
-				resolve(new FulfilledPromise(x));
+				resolve(new Fulfilled(x));
 			}
 		} catch(e) {
 			reject(e);
@@ -95,31 +96,31 @@ function coerce(x) {
 	});
 }
 
-function FulfilledPromise(value) {
+function Fulfilled(value) {
 	this.value = value;
 }
 
-FulfilledPromise.prototype = Object.create(Promise.prototype);
-FulfilledPromise.prototype.when = function(onFulfilled, _, resolve) {
+Fulfilled.prototype = Object.create(Promise.prototype);
+Fulfilled.prototype.when = function(onFulfilled, _, resolve) {
 	try {
 		resolve(typeof onFulfilled == 'function'
 			? onFulfilled(this.value) : this);
 	} catch (e) {
-		resolve(new RejectedPromise(e));
+		resolve(new Rejected(e));
 	}
 };
 
-function RejectedPromise(reason) {
+function Rejected(reason) {
 	this.value = reason;
 }
 
-RejectedPromise.prototype = Object.create(Promise.prototype);
-RejectedPromise.prototype.when = function(_, onRejected, resolve) {
+Rejected.prototype = Object.create(Promise.prototype);
+Rejected.prototype.when = function(_, onRejected, resolve) {
 	try {
 		resolve(typeof onRejected == 'function'
 			? onRejected(this.value) : this);
 	} catch (e) {
-		resolve(new RejectedPromise(e));
+		resolve(new Rejected(e));
 	}
 };
 
@@ -142,35 +143,42 @@ function reject(x) {
 // Return a promise that will fulfill after all promises in array
 // have fulfilled, or will reject after one promise in array rejects
 function all(array) {
-	return cast(array).then(function(array) {
-		return new Promise(resolveAll);
+	return new Promise(resolveAll);
 
-		function resolveAll(resolve, reject) {
-			var results, toResolve = array.length;
+	function resolveAll(resolve, reject) {
+		var results, toResolve = array.length;
 
-			if(!toResolve) {
-				resolve(results);
-				return;
-			}
-
-			results = [];
-			array.forEach(function(item, i) {
-				cast(item).then(function(mapped) {
-					results[i] = mapped;
-
-					if(!--toResolve) {
-						resolve(results);
-					}
-				}, reject);
-			});
+		if(!toResolve) {
+			resolve(results);
+			return;
 		}
-	});
+
+		results = [];
+		array.forEach(function(item, i) {
+			cast(item).then(function(value) {
+				results[i] = value;
+
+				if(!--toResolve) {
+					resolve(results);
+				}
+			}, reject);
+		});
+	}
+}
+
+function race(array) {
+	return new Promise(resolveRace);
+
+	function resolveRace(resolve, reject) {
+		array.forEach(function(item) {
+			cast(item).then(resolve, reject);
+		});
+	}
 }
 
 function noop() {}
 
 handlerQueue = [];
-
 function enqueue(task) {
 	if(handlerQueue.push(task) === 1) {
 		nextTick(drainQueue);
@@ -178,12 +186,9 @@ function enqueue(task) {
 }
 
 function drainQueue() {
-	var task, i, queue;
+	var task, i = 0, queue = handlerQueue;
 
-	i = 0;
-	queue = handlerQueue;
 	handlerQueue = [];
-
 	while(task = queue[i++]) {
 		task();
 	}
@@ -193,7 +198,7 @@ function drainQueue() {
 /*global process,window,document*/
 if (typeof process === 'object' && process.nextTick) {
 	nextTick = process.nextTick;
-} else if(typeof window !== 'undefined' && (MutationObserver = this.MutationObserver || this.WebKitMutationObserver)) {
+} else if(typeof window !== 'undefined' && (MutationObserver = window.MutationObserver || window.WebKitMutationObserver)) {
 	nextTick = (function(document, MutationObserver, drainQueue) {
 		var el = document.createElement('div');
 		new MutationObserver(drainQueue).observe(el, { attributes: true });
