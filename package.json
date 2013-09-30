@@ -1,0 +1,23 @@
+{
+	"name": "truth",
+	"version": "0.1.0",
+	"description": "Promises",
+	"main": "Promise.js",
+	"keywords": [
+		"promise",
+		"promises",
+		"promises/a+",
+		"deferred",
+		"deferreds",
+		"async"
+	],
+	"devDependencies": {
+		"promises-aplus-tests": "",
+		"jshint": "~2"
+	},
+	"scripts": {
+		"test": "promises-aplus-tests test/aplus-adapter.js"
+	},
+	"author": "brian@hovercraftstudios.com",
+	"license": "MIT"
+}
