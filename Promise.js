@@ -17,10 +17,10 @@ function Promise(resolver) {
 	var value, handlers = [];
 
 	this.when = function(onFulfilled, onRejected, resolve) {
-		handlers ? handlers.push(deliver) : enqueue(function() { deliver(value); });
+		handlers ? handlers.push(deliver) : enqueue(deliver);
 
-		function deliver(p) {
-			p.when(onFulfilled, onRejected, resolve);
+		function deliver() {
+			value.when(onFulfilled, onRejected, resolve);
 		}
 	};
 
@@ -47,8 +47,8 @@ function Promise(resolver) {
 
 		enqueue(function () {
 			value = coerce(x);
-			queue.forEach(function (handler) {
-				handler(value);
+			queue.forEach(function(handler) {
+				handler();
 			});
 		});
 	}
