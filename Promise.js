@@ -43,9 +43,9 @@ function Promise(resolver) {
 
 		var queue = handlers;
 		handlers = void 0;
-		value = coerce(x);
 
 		enqueue(function () {
+			value = coerce(x);
 			queue.forEach(function (handler) {
 				handler(value);
 			});
@@ -54,16 +54,16 @@ function Promise(resolver) {
 }
 
 Promise.prototype.then = function(onFulfilled, onRejected) {
-	var when = this.when;
+	var self = this;
 	return new Promise(function(resolve) {
-		when(onFulfilled, onRejected, resolve);
+		self.when(onFulfilled, onRejected, resolve);
 	});
 };
 
 Promise.prototype.done = function(task) {
 	this.when(task, function(e) {
 		enqueue(function() { throw e; });
-	}, function() {});
+	}, noop);
 }
 
 Promise.prototype['catch'] = function(onRejected) {
@@ -81,19 +81,17 @@ function coerce(x) {
 	}
 
 	return new Promise(function(resolve, reject) {
-		enqueue(function() {
-			try {
-				var untrustedThen = x.then;
+		try {
+			var untrustedThen = x.then;
 
-				if(typeof untrustedThen === 'function') {
-					call(untrustedThen, x, resolve, reject);
-				} else {
-					resolve(new FulfilledPromise(x));
-				}
-			} catch(e) {
-				reject(e);
+			if(typeof untrustedThen === 'function') {
+				call(untrustedThen, x, resolve, reject);
+			} else {
+				resolve(new FulfilledPromise(x));
 			}
-		});
+		} catch(e) {
+			reject(e);
+		}
 	});
 }
 
@@ -169,6 +167,8 @@ function all(array) {
 	});
 }
 
+function noop() {}
+
 handlerQueue = [];
 
 function enqueue(task) {
@@ -182,7 +182,6 @@ function drainQueue() {
 
 	i = 0;
 	queue = handlerQueue;
-
 	handlerQueue = [];
 
 	while(task = queue[i++]) {
@@ -191,7 +190,7 @@ function drainQueue() {
 }
 
 // Sniff "best" async scheduling option
-/*global process*/
+/*global process,window,document*/
 if (typeof process === 'object' && process.nextTick) {
 	nextTick = process.nextTick;
 } else if(typeof window !== 'undefined' && (MutationObserver = this.MutationObserver || this.WebKitMutationObserver)) {

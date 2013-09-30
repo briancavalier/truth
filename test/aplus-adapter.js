@@ -11,5 +11,5 @@ exports.pending = function() {
 	return pending;
 };
 
-exports.fulfill = Promise.resolve;
-exports.reject = Promise.reject;
+exports.fulfilled = Promise.resolve;
+exports.rejected = Promise.reject;
