@@ -16,6 +16,8 @@ Promise.race    = race;
 function Promise(resolver) {
 	var value, handlers = [];
 
+	// Internal API to transform the value inside a promise,
+	// and then pass to a continuation
 	this.when = function(onFulfilled, onRejected, resolve) {
 		handlers ? handlers.push(deliver) : enqueue(deliver);
 
@@ -46,14 +48,16 @@ function Promise(resolver) {
 		handlers = undef;
 
 		enqueue(function () {
+			// coerce/assimilate just 
 			value = coerce(x);
-			queue.forEach(function(handler) {
-				handler();
-			});
+			for(var i=0; i<queue.length; ++i) {
+				queue[i]();
+			}
 		});
 	}
 }
 
+// ES6 + Promises/A+ then()
 Promise.prototype.then = function(onFulfilled, onRejected) {
 	var self = this;
 	return new Promise(function(resolve) {
@@ -61,15 +65,20 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
 	});
 };
 
+
+// ES6 proposed catch()
+Promise.prototype['catch'] = function(onRejected) {
+	return this.then(null, onRejected);
+};
+
+// Non-standard done()
+// If promise fulfills, passes the fulfillment value to task.  If promise
+// rejects, loudly rethrows the reason to the host environment
 Promise.prototype.done = function(task) {
 	this.when(task, function(e) {
 		enqueue(function() { throw e; });
 	}, noop);
 }
-
-Promise.prototype['catch'] = function(onRejected) {
-	return this.then(null, onRejected);
-};
 
 // Coerce x to a promise
 function coerce(x) {
@@ -96,6 +105,8 @@ function coerce(x) {
 	});
 }
 
+// A fulfilled promise
+// NOTE: Must not be exposed
 function Fulfilled(value) {
 	this.value = value;
 }
@@ -110,6 +121,8 @@ Fulfilled.prototype.when = function(onFulfilled, _, resolve) {
 	}
 };
 
+// A rejected promise
+// NOTE: Must not be exposed
 function Rejected(reason) {
 	this.value = reason;
 }
@@ -124,16 +137,20 @@ Rejected.prototype.when = function(_, onRejected, resolve) {
 	}
 };
 
+// If x is a trusted promise, return it, otherwise
+// return a new promise that follows x
 function cast(x) {
 	return x instanceof Promise ? x : resolve(x);
 }
 
+// Return a promise that follows x
 function resolve(x) {
 	return new Promise(function(resolve) {
 		resolve(x);
 	});
 }
 
+// Return a promise that is rejected with reason x
 function reject(x) {
 	return new Promise(function(_, reject) {
 		reject(x);
@@ -166,6 +183,8 @@ function all(array) {
 	}
 }
 
+// Return a promise that will settle to the same state as the first
+// input promise that settles.
 function race(array) {
 	return new Promise(resolveRace);
 
@@ -177,6 +196,8 @@ function race(array) {
 }
 
 function noop() {}
+
+// Internal Task queue
 
 handlerQueue = [];
 function enqueue(task) {
