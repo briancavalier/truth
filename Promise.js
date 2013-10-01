@@ -48,7 +48,7 @@ function Promise(resolver) {
 		handlers = undef;
 
 		enqueue(function () {
-			// coerce/assimilate just 
+			// coerce/assimilate just
 			value = coerce(x);
 			for(var i=0; i<queue.length; ++i) {
 				queue[i]();
@@ -91,16 +91,12 @@ function coerce(x) {
 	}
 
 	return new Promise(function(resolve, reject) {
-		try {
-			var untrustedThen = x.then;
+		var untrustedThen = x.then;
 
-			if(typeof untrustedThen === 'function') {
-				call(untrustedThen, x, resolve, reject);
-			} else {
-				resolve(new Fulfilled(x));
-			}
-		} catch(e) {
-			reject(e);
+		if(typeof untrustedThen === 'function') {
+			call(untrustedThen, x, resolve, reject);
+		} else {
+			resolve(new Fulfilled(x));
 		}
 	});
 }
