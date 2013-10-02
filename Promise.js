@@ -86,19 +86,19 @@ function coerce(x) {
 		return x;
 	}
 
-	if (!(x === Object(x) && 'then' in x)) {
-		return new Fulfilled(x);
-	}
-
-	return new Promise(function(resolve, reject) {
-		var untrustedThen = x.then;
+	try {
+		var untrustedThen = x === Object(x) && x.then;
 
 		if(typeof untrustedThen === 'function') {
-			call(untrustedThen, x, resolve, reject);
+			return new Promise(function(resolve, reject) {
+				call(untrustedThen, x, resolve, reject);
+			});
 		} else {
-			resolve(new Fulfilled(x));
+			return new Fulfilled(x);
 		}
-	});
+	} catch(e) {
+		return new Rejected(e);
+	}
 }
 
 // A fulfilled promise
