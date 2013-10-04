@@ -65,20 +65,10 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
 	});
 };
 
-
 // ES6 proposed catch()
 Promise.prototype['catch'] = function(onRejected) {
 	return this.then(null, onRejected);
 };
-
-// Non-standard done()
-// If promise fulfills, passes the fulfillment value to task.  If promise
-// rejects, loudly rethrows the reason to the host environment
-Promise.prototype.done = function(task) {
-	this.when(task, function(e) {
-		enqueue(function() { throw e; });
-	}, noop);
-}
 
 // Coerce x to a promise
 function coerce(self, x) {
@@ -93,16 +83,19 @@ function coerce(self, x) {
 	try {
 		var untrustedThen = x === Object(x) && x.then;
 
-		if(typeof untrustedThen === 'function') {
-			return new Promise(function(resolve, reject) {
-				call(untrustedThen, x, resolve, reject);
-			});
-		} else {
-			return new Fulfilled(x);
-		}
+		return typeof untrustedThen === 'function'
+			? assimilate(x, untrustedThen)
+			: new Fulfilled(x);
 	} catch(e) {
 		return new Rejected(e);
 	}
+}
+
+// Assimilate a foreign thenable
+function assimilate(x, untrustedThen) {
+	return new Promise(function (resolve, reject) {
+		call(untrustedThen, x, resolve, reject);
+	});
 }
 
 // A fulfilled promise
