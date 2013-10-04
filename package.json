@@ -12,7 +12,7 @@
 		"async"
 	],
 	"devDependencies": {
-		"promises-aplus-tests": "",
+		"promises-aplus-tests": "~2",
 		"jshint": "~2"
 	},
 	"scripts": {

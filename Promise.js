@@ -14,7 +14,7 @@ Promise.race    = race;
 
 // Return a pending promise whose fate is determined by resolver
 function Promise(resolver) {
-	var value, handlers = [];
+	var value, handlers = [], self = this;
 
 	// Internal API to transform the value inside a promise,
 	// and then pass to a continuation
@@ -49,7 +49,7 @@ function Promise(resolver) {
 
 		enqueue(function () {
 			// coerce/assimilate just
-			value = coerce(x);
+			value = coerce(self, x);
 			for(var i=0; i<queue.length; ++i) {
 				queue[i]();
 			}
@@ -81,7 +81,11 @@ Promise.prototype.done = function(task) {
 }
 
 // Coerce x to a promise
-function coerce(x) {
+function coerce(self, x) {
+	if(x === self) {
+		return new Rejected(new TypeError());
+	}
+
 	if(x instanceof Promise) {
 		return x;
 	}
@@ -214,7 +218,7 @@ function drainQueue() {
 // Sniff "best" async scheduling option
 /*global process,window,document*/
 if (typeof process === 'object' && process.nextTick) {
-	nextTick = process.nextTick;
+	nextTick = typeof setImmediate === 'function' ? setImmediate : process.nextTick;
 } else if(typeof window !== 'undefined' && (MutationObserver = window.MutationObserver || window.WebKitMutationObserver)) {
 	nextTick = (function(document, MutationObserver, drainQueue) {
 		var el = document.createElement('div');
