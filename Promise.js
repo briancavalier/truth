@@ -12,18 +12,53 @@ Promise.reject  = reject;
 Promise.all     = all;
 Promise.race    = race;
 
+function Handler(f, r, next) {
+	this.f = f;
+	this.r = r;
+	this.next = next;
+}
+
+Handler.prototype.run = function(value) {
+	value.when(this.f, this.r, this.next);
+};
+
+function Queue(owner) {
+	this.owner = owner;
+	this.queue = [];
+}
+
+Queue.prototype.resolve = function(x) {
+	if(this.resolved) {
+		return;
+	}
+	this.value = x;
+	this.resolved = true;
+	enqueue(this);
+}
+
+Queue.prototype.run = function() {
+	var value = this.value = coerce(this.owner, this.value);
+	for(var queue=this.queue, i=0; i<queue.length; ++i) {
+		queue[i].run(value);
+	}
+	this.queue = [];
+}
+
+Queue.prototype.add = function(handler) {
+	this.queue.push(handler);
+	if(this.resolved) {
+		enqueue(this);
+	}
+};
+
 // Return a pending promise whose fate is determined by resolver
 function Promise(resolver) {
-	var value, handlers = [], self = this;
+	var queue = new Queue(this);
 
 	// Internal API to transform the value inside a promise,
 	// and then pass to a continuation
 	this.when = function(onFulfilled, onRejected, resolve) {
-		handlers ? handlers.push(deliver) : enqueue(deliver);
-
-		function deliver() {
-			value.when(onFulfilled, onRejected, resolve);
-		}
+		queue.add(new Handler(onFulfilled, onRejected, resolve));
 	};
 
 	// Call the resolver to seal the promise's fate
@@ -35,25 +70,12 @@ function Promise(resolver) {
 
 	// Reject with reason verbatim
 	function promiseReject(reason) {
-		promiseResolve(new Rejected(reason));
+		queue.resolve(new Rejected(reason));
 	}
 
 	// Resolve with a value, promise, or thenable
 	function promiseResolve(x) {
-		if(!handlers) {
-			return;
-		}
-
-		var queue = handlers;
-		handlers = undef;
-
-		enqueue(function () {
-			// coerce/assimilate just
-			value = coerce(self, x);
-			for(var i=0; i<queue.length; ++i) {
-				queue[i]();
-			}
-		});
+		queue.resolve(x);
 	}
 }
 
@@ -201,10 +223,9 @@ function enqueue(task) {
 
 function drainQueue() {
 	var task, i = 0, queue = handlerQueue;
-
 	handlerQueue = [];
 	while(task = queue[i++]) {
-		task();
+		task.run();
 	}
 }
 
