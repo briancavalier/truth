@@ -82,29 +82,29 @@ Promise.prototype.then = function(f, r) {
 	var self = this;
 	return new Promise(function(resolve, reject) {
 		self._resolver(function(x) {
-			// No assimilation:
-//			try {
-//				resolve(typeof f === 'function' ? f(x) : x);
-//			} catch(e) {
-//				reject(e);
-//			}
-			// With assimilation:
-			coerce(self, x).done(function(x) {
-				resolve(f(x));
-			}, function(e) {
-				resolve(r(e));
-			});
-		}, function(reason) {
+			coerce(self, x).done(onFulfill, onReject);
+		}, onReject);
+
+		function onFulfill(x) {
+			try {
+				resolve(typeof f === 'function' ? f(x) : x);
+			} catch(e) {
+				reject(e);
+			}
+		}
+		function onReject(reason) {
 			try {
 				typeof r === 'function' ? resolve(r(reason)) : reject(reason);
 			} catch(e) {
 				reject(e);
 			}
-		});
+		}
 	});
 };
 
 Promise.prototype.done = function(f, r) {
+	addQueue(this, f, r);
+
 	var self = this;
 	enqueue(function() {
 		self._resolver(function(x) {
@@ -112,24 +112,39 @@ Promise.prototype.done = function(f, r) {
 			memoized();
 
 			function memoized() {
-				if(typeof f === 'function') {
-					f(x);
-				}
+				runQueue(self, 0, x);
 			}
 		}, function(e) {
 			self._resolver = memoized;
 			memoized();
 
 			function memoized() {
-				if(typeof r === 'function') {
-					r(e);
-				} else {
-					throw e;
-				}
+				runQueue(self, 1, e, true);
 			}
 		});
+
 	});
 };
+
+function addQueue(promise, f, r) {
+	promise._queue ? (promise._queue.push(f, r)) : (promise._queue = [f, r]);
+}
+
+function runQueue(promise, start, value, rethrow) {
+	var queue = promise._queue;
+	promise._queue = void 0;
+
+	if(queue) {
+		for(var f, i=start, len = queue.length; i < len; i += 2) {
+			f = queue[i];
+			if(typeof f === 'function') {
+				f(value);
+			} else if(rethrow) {
+				throw value;
+			}
+		}
+	}
+}
 
 // Coerce x to a promise
 function coerce(self, x) {

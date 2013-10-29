@@ -13,10 +13,11 @@
 	],
 	"devDependencies": {
 		"promises-aplus-tests": "~2",
-		"jshint": "~2"
+		"jshint": "~2",
+		"buster": "~0.7"
 	},
 	"scripts": {
-		"test": "promises-aplus-tests test/aplus-adapter.js"
+		"test": "buster-test && promises-aplus-tests test/aplus-adapter.js"
 	},
 	"author": "brian@hovercraftstudios.com",
 	"license": "MIT"
