@@ -126,15 +126,22 @@ Promise.prototype.done = function(f, r) {
 	});
 };
 
+var queues = new WeakMap();
 function addQueue(promise, f, r) {
-	promise._queue ? (promise._queue.push(f, r)) : (promise._queue = [f, r]);
+	var q = queues.get(promise);
+	if(!q) {
+		q = [f, r];
+		queues.set(promise, q);
+	} else {
+		q.push(f, r);
+	}
 }
 
 function runQueue(promise, start, value, rethrow) {
-	var queue = promise._queue;
-	promise._queue = void 0;
+	var queue = queues.get(promise);
 
 	if(queue) {
+		queues.delete(promise);
 		for(var f, i=start, len = queue.length; i < len; i += 2) {
 			f = queue[i];
 			if(typeof f === 'function') {
