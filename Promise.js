@@ -13,29 +13,31 @@ Promise.reject  = reject;
 Promise.all     = all;
 Promise.race    = race;
 
+var resolvers = new WeakMap();
+
 function Promise(resolver) {
-	this._resolver = function(resolve, reject) {
+	resolvers.set(this, function(resolve, reject) {
 		try {
 			resolver(resolve, reject);
 		} catch(e) {
 			reject(e);
 		}
-	};
+	});
 }
 
 Promise.prototype.map = function(f) {
-	var resolver = this._resolver;
+	var self = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(x) {
+		resolvers.get(self)(function(x) {
 			resolve(f(x));
 		}, reject);
 	});
 };
 
 Promise.prototype.ap = function(valuePromise) {
-	var resolver = this._resolver;
+	var self = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(f) {
+		resolvers.get(self)(function(f) {
 			valuePromise.done(function(x) {
 				resolve(f(x));
 			}, reject);
@@ -44,9 +46,9 @@ Promise.prototype.ap = function(valuePromise) {
 };
 
 Promise.prototype.flatMap = function(f) {
-	var resolver = this._resolver;
+	var self = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(x) {
+		resolvers.get(self)(function(x) {
 			f(x).done(resolve, reject);
 		}, reject);
 	});
@@ -57,18 +59,18 @@ Promise.prototype.flatten = function() {
 };
 
 Promise.prototype.catch = function(f) {
-	var resolver = this._resolver;
+	var self = this;
 	return new Promise(function(resolve) {
-		resolver(resolve, function(e) {
+		resolvers.get(self)(resolve, function(e) {
 			resolve(f(e));
 		});
 	});
 };
 
 Promise.prototype.finally = function(f) {
-	var resolver = this._resolver;
+	var self = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(x) {
+		resolvers.get(self)(function(x) {
 			f();
 			resolve(x);
 		}, function(e) {
@@ -81,7 +83,7 @@ Promise.prototype.finally = function(f) {
 Promise.prototype.then = function(f, r) {
 	var self = this;
 	return new Promise(function(resolve, reject) {
-		self._resolver(function(x) {
+		resolvers.get(self)(function(x) {
 			coerce(self, x).done(onFulfill, onReject);
 		}, onReject);
 
@@ -107,15 +109,15 @@ Promise.prototype.done = function(f, r) {
 
 	var self = this;
 	enqueue(function() {
-		self._resolver(function(x) {
-			self._resolver = memoized;
+		resolvers.get(self)(function(x) {
+			resolvers.set(self, memoized);
 			memoized();
 
 			function memoized() {
 				runQueue(self, 0, x);
 			}
 		}, function(e) {
-			self._resolver = memoized;
+			resolvers.set(self, memoized);
 			memoized();
 
 			function memoized() {
@@ -177,11 +179,11 @@ function coerce(self, x) {
 // Assimilate a foreign thenable
 function Assimilated(thenable, untrustedThen) {
 	var self = this;
-	this._resolver = function(resolve, reject) {
+	resolvers.set(this, function(resolve, reject) {
 		call(untrustedThen, thenable, function(x) {
 			coerce(self, x).done(resolve, reject);
 		}, reject);
-	};
+	});
 }
 
 Assimilated.prototype = Object.create(Promise.prototype);
@@ -189,9 +191,9 @@ Assimilated.prototype = Object.create(Promise.prototype);
 // A fulfilled promise
 // NOTE: Must not be exposed
 function Fulfilled(value) {
-	this._resolver = function(resolve) {
+	resolvers.set(this, function(resolve) {
 		resolve(value);
-	};
+	});
 }
 
 Fulfilled.prototype = Object.create(Promise.prototype);
@@ -199,9 +201,9 @@ Fulfilled.prototype = Object.create(Promise.prototype);
 // A rejected promise
 // NOTE: Must not be exposed
 function Rejected(reason) {
-	this._resolver = function(_, reject) {
+	resolvers.set(this, function(_, reject) {
 		reject(reason);
-	};
+	});
 }
 
 Rejected.prototype = Object.create(Promise.prototype);
