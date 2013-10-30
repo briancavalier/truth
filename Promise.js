@@ -17,23 +17,31 @@ function Promise(resolver) {
 	this._fork = resolver;
 }
 
-Promise.prototype._resolver = function(resolve, reject) {
+Promise.prototype._fulfilled = function(resolver) {
+	resolver(this.value);
+};
+
+Promise.prototype._rejected = function(_, reject) {
+	reject(this.value);
+};
+
+var pending = Promise.prototype._resolver = function(resolve, reject) {
 	var self = this;
 
 	function resolvePromise(x) {
-		if(self._resolver !== Promise.prototype._resolver) {
+		if(self._resolver !== pending) {
 			return;
 		}
-		self._resolver = function(resolve) { resolve(x); };
-		resolve(x);
+		self._resolver = self._fulfilled;
+		resolve(self.value = x);
 	}
 
 	function rejectPromise(x) {
-		if(self._resolver !== Promise.prototype._resolver) {
+		if(self._resolver !== pending) {
 			return;
 		}
-		self._resolver = function(_, reject) { reject(x); };
-		reject(x);
+		self._resolver = self._rejected;
+		reject(self.value = x);
 	}
 
 	try {
@@ -62,16 +70,17 @@ Promise.prototype.flatMap = function(f) {
 	var prev = this;
 	return new Promise(function(resolve, reject) {
 		prev._resolver(function(x) {
-			coerceOne(f(x)).done(resolve, reject);
+			join(f(x), resolve, reject)
 		}, reject);
 	});
 };
 
-function coerceOne(p) {
-	return p instanceof Promise ? p
-		: new Promise(function (resolve, reject) {
-			p.then(resolve, reject);
-		});
+function join(p, resolve, reject) {
+	if(p instanceof Promise) {
+		p.done(resolve, reject);
+	}
+
+	p.then(resolve, reject);
 }
 
 Promise.prototype.flatten = function() {
@@ -109,13 +118,26 @@ Promise.prototype.delay = function(ms) {
 			}, ms);
 		}, reject);
 	})
-}
+};
+
+Promise.prototype.done = function(f, r) {
+	addQueue(this, f, r);
+
+	var self = this;
+	enqueue(function() {
+		self._resolver(function(x) {
+			runQueue(self, 0, x);
+		}, function(e) {
+			runQueue(self, 1, e, true);
+		});
+	});
+};
 
 Promise.prototype.then = function(f, r) {
 	var prev = this;
 	return new Promise(function (resolve, reject) {
 		prev._resolver(function (x) {
-			coerce(prev, x).done(onFulfill, onReject);
+			joinFully(prev, x).done(onFulfill, onReject);
 		}, onReject);
 
 		function onFulfill(x) {
@@ -136,18 +158,26 @@ Promise.prototype.then = function(f, r) {
 	});
 };
 
-Promise.prototype.done = function(f, r) {
-	addQueue(this, f, r);
+// Coerce x to a promise
+function joinFully(self, x) {
+	if(x === self) {
+		return new Rejected(new TypeError());
+	}
 
-	var self = this;
-	enqueue(function() {
-		self._resolver(function(x) {
-			runQueue(self, 0, x);
-		}, function(e) {
-			runQueue(self, 1, e, true);
-		});
-	});
-};
+	if(x instanceof Promise) {
+		return x;
+	}
+
+	try {
+		var untrustedThen = x === Object(x) && x.then;
+
+		return typeof untrustedThen === 'function'
+			? new Assimilated(x, untrustedThen)
+			: new Fulfilled(x);
+	} catch(e) {
+		return new Rejected(e);
+	}
+}
 
 function addQueue(promise, f, r) {
 	promise._queue ? (promise._queue.push(f, r)) : (promise._queue = [f, r]);
@@ -169,33 +199,12 @@ function runQueue(promise, start, value, rethrow) {
 	}
 }
 
-// Coerce x to a promise
-function coerce(self, x) {
-	if(x === self) {
-		return new Rejected(new TypeError());
-	}
-
-	if(x instanceof Promise) {
-		return x;
-	}
-
-	try {
-		var untrustedThen = x === Object(x) && x.then;
-
-		return typeof untrustedThen === 'function'
-			? new Assimilated(x, untrustedThen)
-			: new Fulfilled(x);
-	} catch(e) {
-		return new Rejected(e);
-	}
-}
-
 // Assimilate a foreign thenable
 function Assimilated(thenable, untrustedThen) {
 	var self = this;
 	this._resolver = function(resolve, reject) {
 		call(untrustedThen, thenable, function(x) {
-			coerce(self, x).done(resolve, reject);
+			joinFully(self, x).done(resolve, reject);
 		}, reject);
 	};
 }
