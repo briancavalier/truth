@@ -4,7 +4,7 @@ bind = Function.prototype.bind;
 uncurryThis = bind.bind(bind.call);
 call = uncurryThis(bind.call);
 
-module.exports = Promise;
+module.exports  = Promise;
 
 Promise.of      = of;
 Promise.resolve = of;
@@ -14,39 +14,54 @@ Promise.all     = all;
 Promise.race    = race;
 
 function Promise(resolver) {
-	this._resolver = function(resolve, reject) {
-		try {
-			resolver(resolve, reject);
-		} catch(e) {
-			reject(e);
+	this._fork = resolver;
+}
+
+Promise.prototype._resolver = function(resolve, reject) {
+	var self = this;
+
+	function resolvePromise(x) {
+		if(self._resolver !== Promise.prototype._resolver) {
+			return;
 		}
-	};
+		self._resolver = function(resolve) { resolve(x); };
+		resolve(x);
+	}
+
+	function rejectPromise(x) {
+		if(self._resolver !== Promise.prototype._resolver) {
+			return;
+		}
+		self._resolver = function(_, reject) { reject(x); };
+		reject(x);
+	}
+
+	try {
+		this._fork(resolvePromise, rejectPromise);
+	} catch(e) {
+		rejectPromise(e);
+	}
 }
 
 Promise.prototype.map = function(f) {
-	var resolver = this._resolver;
+	var prev = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(x) {
+		prev._resolver(function(x) {
 			resolve(f(x));
 		}, reject);
 	});
 };
 
 Promise.prototype.ap = function(valuePromise) {
-	var resolver = this._resolver;
-	return new Promise(function(resolve, reject) {
-		resolver(function(f) {
-			valuePromise.done(function(x) {
-				resolve(f(x));
-			}, reject);
-		});
+	return this.flatMap(function(f) {
+		return valuePromise.map(f);
 	});
 };
 
 Promise.prototype.flatMap = function(f) {
-	var resolver = this._resolver;
+	var prev = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(x) {
+		prev._resolver(function(x) {
 			coerceOne(f(x)).done(resolve, reject);
 		}, reject);
 	});
@@ -64,18 +79,18 @@ Promise.prototype.flatten = function() {
 };
 
 Promise.prototype.catch = function(f) {
-	var resolver = this._resolver;
+	var prev = this;
 	return new Promise(function(resolve) {
-		resolver(resolve, function(e) {
+		prev._resolver(resolve, function(e) {
 			resolve(f(e));
 		});
 	});
 };
 
 Promise.prototype.finally = function(f) {
-	var resolver = this._resolver;
+	var prev = this;
 	return new Promise(function(resolve, reject) {
-		resolver(function(x) {
+		prev._resolver(function(x) {
 			f();
 			resolve(x);
 		}, function(e) {
@@ -85,11 +100,22 @@ Promise.prototype.finally = function(f) {
 	});
 };
 
+Promise.prototype.delay = function(ms) {
+	var prev = this;
+	return new Promise(function(resolve, reject) {
+		prev._resolver(function(x) {
+			setTimeout(function() {
+				resolve(x);
+			}, ms);
+		}, reject);
+	})
+}
+
 Promise.prototype.then = function(f, r) {
-	var self = this;
+	var prev = this;
 	return new Promise(function (resolve, reject) {
-		self._resolver(function (x) {
-			coerce(self, x).done(onFulfill, onReject);
+		prev._resolver(function (x) {
+			coerce(prev, x).done(onFulfill, onReject);
 		}, onReject);
 
 		function onFulfill(x) {
@@ -116,19 +142,9 @@ Promise.prototype.done = function(f, r) {
 	var self = this;
 	enqueue(function() {
 		self._resolver(function(x) {
-			self._resolver = memoized;
-			memoized();
-
-			function memoized() {
-				runQueue(self, 0, x);
-			}
+			runQueue(self, 0, x);
 		}, function(e) {
-			self._resolver = memoized;
-			memoized();
-
-			function memoized() {
-				runQueue(self, 1, e, true);
-			}
+			runQueue(self, 1, e, true);
 		});
 	});
 };
@@ -236,13 +252,13 @@ function all(array) {
 
 		results = [];
 		array.forEach(function(item, i) {
-			of(item).then(function(value) {
+			of(item).then(identity).done(function(value) {
 				results[i] = value;
 
 				if(!--toResolve) {
 					resolve(results);
 				}
-			}, reject).done();
+			}, reject);
 		});
 	}
 }
@@ -260,6 +276,7 @@ function race(array) {
 }
 
 function identity(x) { return x; }
+function noop() {}
 
 // Internal Task queue
 
