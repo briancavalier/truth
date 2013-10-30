@@ -47,10 +47,17 @@ Promise.prototype.flatMap = function(f) {
 	var resolver = this._resolver;
 	return new Promise(function(resolve, reject) {
 		resolver(function(x) {
-			f(x).done(resolve, reject);
+			coerceOne(f(x)).done(resolve, reject);
 		}, reject);
 	});
 };
+
+function coerceOne(p) {
+	return p instanceof Promise ? p
+		: new Promise(function (resolve, reject) {
+			p.then(resolve, reject);
+		});
+}
 
 Promise.prototype.flatten = function() {
 	return this.flatMap(identity);
@@ -80,22 +87,23 @@ Promise.prototype.finally = function(f) {
 
 Promise.prototype.then = function(f, r) {
 	var self = this;
-	return new Promise(function(resolve, reject) {
-		self._resolver(function(x) {
+	return new Promise(function (resolve, reject) {
+		self._resolver(function (x) {
 			coerce(self, x).done(onFulfill, onReject);
 		}, onReject);
 
 		function onFulfill(x) {
 			try {
 				resolve(typeof f === 'function' ? f(x) : x);
-			} catch(e) {
+			} catch (e) {
 				reject(e);
 			}
 		}
+
 		function onReject(reason) {
 			try {
 				typeof r === 'function' ? resolve(r(reason)) : reject(reason);
-			} catch(e) {
+			} catch (e) {
 				reject(e);
 			}
 		}
@@ -122,7 +130,6 @@ Promise.prototype.done = function(f, r) {
 				runQueue(self, 1, e, true);
 			}
 		});
-
 	});
 };
 
@@ -177,7 +184,7 @@ function Assimilated(thenable, untrustedThen) {
 	};
 }
 
-Assimilated.prototype = Object.create(Promise.prototype);
+Assimilated.prototype = Promise.prototype;
 
 // A fulfilled promise
 // NOTE: Must not be exposed
@@ -187,7 +194,7 @@ function Fulfilled(value) {
 	};
 }
 
-Fulfilled.prototype = Object.create(Promise.prototype);
+Fulfilled.prototype = Promise.prototype;
 
 // A rejected promise
 // NOTE: Must not be exposed
@@ -197,7 +204,7 @@ function Rejected(reason) {
 	};
 }
 
-Rejected.prototype = Object.create(Promise.prototype);
+Rejected.prototype = Promise.prototype;
 
 function of(x) {
 	return new Fulfilled(x);
@@ -229,13 +236,13 @@ function all(array) {
 
 		results = [];
 		array.forEach(function(item, i) {
-			cast(item).done(function(value) {
+			of(item).then(function(value) {
 				results[i] = value;
 
 				if(!--toResolve) {
 					resolve(results);
 				}
-			}, reject);
+			}, reject).done();
 		});
 	}
 }
