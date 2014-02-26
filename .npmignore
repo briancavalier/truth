@@ -1,0 +1,7 @@
+/node_modules/
+/benchmark/
+/perf/
+/test/
+.jshintrc
+.jshintignore
+.gitignore
