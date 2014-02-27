@@ -160,12 +160,12 @@ Promise.prototype._runHandlers = function() {
 	var q = this._handlers;
 	this._handlers = [];
 	for(var i=0; i< q.length; i+=5) {
-		this._callHandler(q[i], q[i+1], q[i+handlerOffset], q[i+4], this._value);
+		this._callHandler(q[i], q[i+1], q[i+handlerOffset], q[i+4]);
 	}
 };
 
-Promise.prototype._callHandler = function(resolve, p, f, t, x) {
-	x = typeof f === 'function' ? tryCatch(f, t, x) : this;
+Promise.prototype._callHandler = function(resolve, p, f, t) {
+	var x = typeof f === 'function' ? tryCatch(f, t, this._value) : this;
 	resolve.call(p, x);
 };
 
