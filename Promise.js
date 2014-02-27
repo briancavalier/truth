@@ -37,24 +37,20 @@ function Promise(resolver) {
 	}
 }
 
-function runResolver(resolver, promiseResolve, promiseReject) {
-	try {
-		resolver(promiseResolve, promiseReject);
-	} catch(e) {
-		promiseReject(e);
-	}
-}
-
+// Consume the promise's value and assume responsibility for errors
+// Any errors thrown by f or r will be fatal
 Promise.prototype.done = function(f, r) {
 	this._when(this._maybeFatal, this, f, r);
 };
 
+// Transform the promise's value
 Promise.prototype.then = function(f, r) {
 	var p = new InternalPromise();
 	this._when(p._resolve, p, f, r);
 	return p;
 };
 
+// Recover from errors
 Promise.prototype['catch'] = function(onRejected) {
 	return this.then(null, onRejected);
 };
@@ -186,7 +182,6 @@ Promise.prototype._callHandler = function(resolve, p, f, t, x) {
 Promise.prototype._assimilate = function(x) {
 	try {
 		var then = x.then;
-
 		if(typeof then === 'function') {
 			enqueue(this._runAssimilate, this, then, x);
 		} else {
@@ -228,6 +223,14 @@ Promise.prototype._fatal = function(e) {
 		throw e;
 	}, 0);
 };
+
+function runResolver(resolver, promiseResolve, promiseReject) {
+	try {
+		resolver(promiseResolve, promiseReject);
+	} catch(e) {
+		promiseReject(e);
+	}
+}
 
 function tryCatch(f, t, x) {
 	try {
