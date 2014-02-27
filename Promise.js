@@ -60,31 +60,21 @@ Promise.prototype['catch'] = function(onRejected) {
 // have fulfilled, or will reject after one promise in array rejects
 function all(promises) {
 	var p = new InternalPromise();
-	promises = Object(promises);
-	var pending = promises.length >>> 0;
-
-	if (pending === 0) {
-		p._fulfill([]);
-		return p;
-	}
-
-	var results = new Array(pending);
-
+	var pending = 0;
+	var results = [];
+	
 	promises.forEach(function(x, i) {
-		resolve(x).then(function (x) {
-			add(x, i);
-		}, _reject);
+		++pending
+		resolve(x)._when(noop, void 0, function(x) {
+			results[i] = x;
+			if(--pending === 0) {
+				p._fulfill(results);
+			}
+		}, p._reject, p);
 	});
 
-	function _reject(e) {
-		p._reject(e);
-	}
-
-	function add(x, i) {
-		results[i] = x;
-		if (--pending === 0) {
-			p._fulfill(results);
-		}
+	if(pending === 0) {
+		p._fulfill([]);
 	}
 
 	return p;
