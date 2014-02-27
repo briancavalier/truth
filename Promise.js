@@ -5,9 +5,9 @@ Promise.reject  = reject;
 Promise.all     = all;
 Promise.race    = race;
 
-var pending = 1;
+var pending   = 0;
 var fulfilled = 2;
-var rejected = 3;
+var rejected  = 3;
 
 // If x is a trusted promise, return it, otherwise
 // return a new promise that follows x
@@ -55,7 +55,7 @@ Promise.prototype.then = function(f, r) {
 	return p;
 };
 
-Promise.prototype.catch = function(onRejected) {
+Promise.prototype['catch'] = function(onRejected) {
 	return this.then(null, onRejected);
 };
 
@@ -151,33 +151,6 @@ Promise.prototype._follow = function(x) {
 	}
 };
 
-Promise.prototype._assimilate = function(x) {
-	try {
-		var then = x.then;
-
-		if(typeof then === 'function') {
-			enqueue(this._runAssimilate, this, then, x);
-		} else {
-			this._fulfill(x);
-		}
-	} catch(e) {
-		this._reject(e);
-	}
-};
-
-Promise.prototype._runAssimilate = function(then, x) {
-	var p = this;
-	try {
-		then.call(x,
-			function(x) { p._resolve(x); },
-			function(x) { p._reject(x); }
-		);
-	}
-	catch(e) {
-		this._reject(e);
-	}
-};
-
 Promise.prototype._fulfill = function(x) {
 	if(this._state !== pending) return;
 
@@ -197,11 +170,11 @@ Promise.prototype._reject = function(x) {
 };
 
 Promise.prototype._runHandlers = function() {
+	var handlerOffset = this._state;
 	var q = this._handlers;
 	this._handlers = [];
-	var o = this._state;
 	for(var i=0; i< q.length; i+=5) {
-		this._callHandler(q[i], q[i+1], q[i+o], q[i+4], this._value);
+		this._callHandler(q[i], q[i+1], q[i+handlerOffset], q[i+4], this._value);
 	}
 };
 
@@ -210,9 +183,43 @@ Promise.prototype._callHandler = function(resolve, p, f, t, x) {
 	resolve.call(p, x);
 };
 
+Promise.prototype._assimilate = function(x) {
+	try {
+		var then = x.then;
+
+		if(typeof then === 'function') {
+			enqueue(this._runAssimilate, this, then, x);
+		} else {
+			this._fulfill(x);
+		}
+	} catch(e) {
+		this._reject(e);
+	}
+};
+
+Promise.prototype._runAssimilate = function(then, x) {
+	var done = false;
+	var reject = once(this._reject, this);
+	try {
+		then.call(x, once(this._resolve, this), reject);
+	}
+	catch(e) {
+		reject(e);
+	}
+
+	function once(f, t) {
+		return function(x) {
+			if(done) return;
+			done = true;
+			f.call(t, x);
+		};
+	}
+};
+
+
 Promise.prototype._maybeFatal = function(x) {
 	if(x != null && Object(x) === x) {
-		resolve(x).catch(this._fatal);
+		resolve(x)['catch'](this._fatal);
 	}
 };
 

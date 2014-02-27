@@ -1,28 +1,15 @@
 var Promise = require('../Promise');
 //var Promise = require('when');
-var dummy = { dummy: 'dummy'};
 
-Promise.resolve(tx_y_x());
+new Promise(function(r) {
+	r(delay(100, 123));
+	r(456);
+}).done(console.log);
 
-//var promise = Promise.resolve(dummy).then(function() {
-//	return tx_y_x();
-//}).done(function(x) {
-//	console.log(x);
-//});
-console.log('hi');
-
-function tx_y_x() {
-	var t = {
-		then: function (resolveOuter) {
-			console.log('thenable', 123);
-			resolveOuter(123);
-//			{
-//				then: function (resolveInner) {
-//					resolveOuter(123);
-////					resolveInner(123);
-//				}
-//			});
-		}
-	};
-	return t;
+function delay(ms, x) {
+	return new Promise(function(r) {
+		setTimeout(function() {
+			r(x);
+		}, ms);
+	});
 }
